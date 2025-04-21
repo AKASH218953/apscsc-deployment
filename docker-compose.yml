@@ -1,0 +1,119 @@
+version: '3.8'
+services:
+  yolo:
+    image: yolo-service:latest
+    build:
+      context: ../apscsc-ai-modules/gunny-bag-counting
+      dockerfile: ../../apscsc-deployment/docker/yolo.Dockerfile
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    environment:
+      - MODEL_PATH=/models/yolov8n.pt
+      - GRPC_SERVER=backend:8080
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./data/models:/models
+  paddleocr:
+    image: paddleocr-service:latest
+    build:
+      context: ../apscsc-ai-modules/vehicle-recognition
+      dockerfile: ../../apscsc-deployment/docker/paddleocr.Dockerfile
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    environment:
+      - GRPC_SERVER=backend:8080
+    ports:
+      - "5001:5001"
+  arcface:
+    image: arcface-service:latest
+    build:
+      context: ../apscsc-ai-modules/facial-recognition
+      dockerfile: ../../apscsc-deployment/docker/arcface.Dockerfile
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    environment:
+      - GRPC_SERVER=backend:8080
+    ports:
+      - "5002:5002"
+      
+  contextual:
+    image: contextual-service:latest
+    build:
+      context: ../apscsc-ai-modules/contextual-intelligence
+      dockerfile: ../../apscsc-deployment/docker/contextual.Dockerfile
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    environment:
+      - MODEL_PATH=/models/llava.pt
+      - GRPC_SERVER=backend:8080
+    ports:
+      - "5003:5003"
+    volumes:
+      - ./data/models:/models
+  backend:
+    image: go-backend:latest
+    build:
+      context: ../apscsc-backend
+      dockerfile: ../apscsc-deployment/docker/backend.Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - MONGO_URI=mongodb://mongo:27017
+      - PROMETHEUS_URL=http://prometheus:9090
+    depends_on:
+      - mongo
+  mongo:
+    image: mongo:6.0
+    volumes:
+      - mongo-data:/data/db
+    ports:
+      - "27017:27017"
+  grafana:
+    image: grafana/grafana:11.3.0
+    build:
+      context: ../apscsc-frontend/grafana
+      dockerfile: ../../apscsc-deployment/docker/grafana.Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SMTP_ENABLED=true
+      - GF_SMTP_HOST=smtp.gmail.com:587
+      - GF_SMTP_USER=your-email@gmail.com
+      - GF_SMTP_PASSWORD=your-app-password
+    volumes:
+      - grafana-data:/var/lib/grafana
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+  ffmpeg:
+    image: jrottenberg/ffmpeg:4.4-ubuntu
+    command: -i rtsp://localhost:8554/feed -f rtsp rtsp://yolo:5000/stream
+    ports:
+      - "8554:8554"
+volumes:
+  mongo-data:
+  grafana-data:
